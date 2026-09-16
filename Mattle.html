@@ -76,6 +76,8 @@ body{
 .team[data-side="B"]{--tc:var(--b); --tc-deep:var(--b-deep); --tc-glow:var(--b-glow);}
 .team .tname{font-size:clamp(1rem,2.4vw,1.5rem); font-weight:900; letter-spacing:-.02em; color:var(--tc); text-align:center; line-height:1.05;}
 .team .count{font-size:clamp(2rem,5.5vw,3.6rem); font-weight:900; font-variant-numeric:tabular-nums; line-height:1;}
+.team .puck{display:inline-block; font-size:clamp(.72rem,1.6vw,.92rem); font-weight:900; padding:3px 12px; border-radius:999px; background:var(--tc); color:#06122a; letter-spacing:.02em; box-shadow:0 0 16px var(--tc-glow); margin:2px 0 4px;}
+.team .puck.hidden{display:none;}
 .team .count small{display:block; font-size:.32em; font-weight:700; letter-spacing:.08em; color:var(--muted); text-transform:uppercase;}
 .team .dir{font-size:clamp(.66rem,1.5vw,.82rem); color:var(--muted); font-weight:700; text-align:center; line-height:1.25;}
 .team .buzzhint{margin-top:2px; font-size:.78rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
@@ -286,6 +288,7 @@ body{
     <div class="team" data-side="A" id="teamA" role="button" tabindex="0" aria-label="Buzzer Team A">
       <div class="turnflag">Am Zug</div>
       <div class="tname" id="nameA">Team A</div>
+      <div class="puck hidden" id="puckA">🏒 Puck</div>
       <div class="count" id="countA">0<small>Felder</small></div>
       <div class="dir">↔ verbinde&nbsp;links&nbsp;&amp;&nbsp;rechts</div>
       <div class="buzzhint">Buzzern</div>
@@ -316,6 +319,7 @@ body{
     <div class="team" data-side="B" id="teamB" role="button" tabindex="0" aria-label="Buzzer Team B">
       <div class="turnflag">Am Zug</div>
       <div class="tname" id="nameB">Team B</div>
+      <div class="puck hidden" id="puckB">🏒 Puck</div>
       <div class="count" id="countB">0<small>Felder</small></div>
       <div class="dir">↕ verbinde&nbsp;oben&nbsp;&amp;&nbsp;unten</div>
       <div class="buzzhint">Buzzern</div>
@@ -362,6 +366,16 @@ body{
         <button data-v="hard">Nur schwer</button>
       </div>
       <div class="help">Schwere Aufgaben nutzen größere Zahlen oder Rechengesetze.</div>
+    </div>
+
+    <div class="field">
+      <label class="lbl">Spielmodus</label>
+      <div class="seg" id="segMode" role="group">
+        <button data-v="buzz">Buzzern</button>
+        <button data-v="alt">Abwechselnd</button>
+        <button data-v="puck">Puck</button>
+      </div>
+      <div class="help"><b>Buzzern:</b> wer zuerst buzzert. <b>Abwechselnd:</b> das Zug-Team wählt sein Sechseck und beantwortet es selbst — nur bei einer falschen Antwort kommt das andere Team dran. <b>Puck:</b> nur das Team mit dem Puck erobert Felder; das andere muss den Puck erst durch eine richtige Lösung gewinnen (dauert länger).</div>
     </div>
 
     <div class="field">
@@ -824,6 +838,7 @@ function makeProblem(areas, difficulties, grade) {
 
 // Für Node-Test exportieren
 
+
 /* app */
 /* ============================================================
    Mattle — Mathe-Battle (Hex-Verbindungsspiel)
@@ -846,6 +861,7 @@ function makeProblem(areas, difficulties, grade) {
   var teamA = $("teamA"), teamB = $("teamB");
   var nameA = $("nameA"), nameB = $("nameB");
   var countA = $("countA"), countB = $("countB");
+  var puckA = $("puckA"), puckB = $("puckB");
   var turnbar = $("turnbar");
   var board = $("board");
   var qcard = $("qcard");
@@ -858,7 +874,7 @@ function makeProblem(areas, difficulties, grade) {
   var btnReset = $("btnReset"), btnSolution = $("btnSolution"), btnSettings = $("btnSettings");
   // Settings
   var ov = $("settingsOverlay"), selGrade = $("selGrade"), areaChecks = $("areaChecks");
-  var segDiff = $("segDiff"), segSize = $("segSize"), segStart = $("segStart");
+  var segDiff = $("segDiff"), segMode = $("segMode"), segSize = $("segSize"), segStart = $("segStart");
   var inpTime = $("inpTime"), inpNameA = $("inpNameA"), inpNameB = $("inpNameB"), chkSound = $("chkSound");
   var btnSettingsClose = $("btnSettingsClose"), btnSettingsSave = $("btnSettingsSave");
   // Win
@@ -876,6 +892,7 @@ function makeProblem(areas, difficulties, grade) {
     grade: 6,
     areas: defaultAreasFor(6),
     difficulty: "mixed",
+    mode: "buzz",          // 'buzz' | 'alt' | 'puck'
     answerTime: 8,
     size: 7,
     start: "random",   // 'random' | 'A' | 'B'
@@ -893,6 +910,7 @@ function makeProblem(areas, difficulties, grade) {
         if (s.areas && typeof s.areas === "object")
           AREA_ORDER.forEach(function (k) { if (typeof s.areas[k] === "boolean") settings.areas[k] = s.areas[k]; });
         if (s.difficulty) settings.difficulty = s.difficulty;
+        if (s.mode === "buzz" || s.mode === "alt" || s.mode === "puck") settings.mode = s.mode;
         if (typeof s.answerTime === "number") settings.answerTime = clampN(s.answerTime, 3, 60);
         if (typeof s.size === "number") settings.size = [5, 7, 9, 11].indexOf(s.size) >= 0 ? s.size : 7;
         if (s.start === "A" || s.start === "B" || s.start === "random") settings.start = s.start;
@@ -1031,6 +1049,9 @@ function makeProblem(areas, difficulties, grade) {
   var buf = "";
   var awaitingContinue = false;
   var rafId = null, deadline = 0, totalMs = 0;
+  var puck = "A";            // Puck-Besitzer (Modus 'puck')
+  function other(t) { return t === "A" ? "B" : "A"; }
+  function startTeam() { return settings.start === "A" ? "A" : settings.start === "B" ? "B" : (Math.random() < 0.5 ? "A" : "B"); }
 
   /* ---------- Spiel starten / zurücksetzen ---------- */
   function startGame() {
@@ -1040,9 +1061,8 @@ function makeProblem(areas, difficulties, grade) {
     attempts = { A: false, B: false }; awaitingContinue = false;
     stopTimer();
     hide(winOverlay); clearConfetti(); hide(qcard);
-    if (settings.start === "A") chooser = "A";
-    else if (settings.start === "B") chooser = "B";
-    else chooser = Math.random() < 0.5 ? "A" : "B";
+    chooser = startTeam();
+    puck = chooser;
     phase = "choose";
     renderBoard(null);
     render();
@@ -1073,12 +1093,23 @@ function makeProblem(areas, difficulties, grade) {
     qcard.style.removeProperty("--ac");
     hide(timerwrap); hide(ansrow); hide(keypad); hide(solutionEl); show(revealInline);
     ansrow.innerHTML = '<span class="ph">Antwort eingeben …</span>';
-    setStatus("Beide Teams buzzern — wer weiß es?", "neutral");
     show(qcard);
     fitProblem();
-
-    setBuzzable(true);
     teamA.classList.remove("active", "dim", "turn"); teamB.classList.remove("active", "dim", "turn");
+
+    if (settings.mode === "alt") {
+      // Abwechselnd: das Zug-Team (chooser) beantwortet die eigene Wahl direkt
+      active = chooser; attempts[chooser] = true; phase = "answering";
+      beginAnswerUI(chooser);
+      sound("buzz"); startTimer();
+    } else {
+      // Buzzern / Puck: beide Teams buzzern
+      phase = "ready";
+      setBuzzable(true);
+      setStatus(settings.mode === "puck"
+        ? (teamName(puck) + " hat den Puck — beide buzzern!")
+        : "Beide Teams buzzern — wer weiß es?", "neutral");
+    }
     renderBoard(null);
     setTurnbar();
   }
@@ -1185,6 +1216,18 @@ function makeProblem(areas, difficulties, grade) {
   function resolveCorrect() {
     stopTimer();
     var team = active;
+    // PUCK-Modus: nur der Puck-Besitzer erobert Felder; sonst zuerst den Puck gewinnen
+    if (settings.mode === "puck" && team !== puck) {
+      puck = team; chooser = team;
+      sound("correct"); flashTeam(team);
+      phase = "resolved";
+      setStatus(teamName(team) + " erobert den Puck! (noch kein Feld) 🏒", "good");
+      revealSolution(false);
+      renderBoard(null);
+      render();
+      armContinue();
+      return;
+    }
     claimHex(team, pending.q, pending.r);
     sound("correct");
     flashTeam(team);
@@ -1200,7 +1243,10 @@ function makeProblem(areas, difficulties, grade) {
       return;
     }
     phase = "resolved";
-    chooser = team; // Gewinner darf das nächste Feld wählen
+    // Nächster Wähler je nach Modus
+    if (settings.mode === "alt") chooser = other(chooser);   // reihum
+    else if (settings.mode === "puck") chooser = puck;        // Puck-Besitzer wählt weiter
+    else chooser = team;                                      // Buzzern: Gewinner wählt
     setStatus("Richtig! " + teamName(team) + " erobert das Feld.", "good");
     revealSolution(false);
     renderBoard(key(pending.q, pending.r));
@@ -1218,9 +1264,9 @@ function makeProblem(areas, difficulties, grade) {
       active = other; attempts[other] = true; phase = "answering"; buf = "";
       setTimeout(function () { if (phase !== "answering") return; beginAnswerUI(other); startTimer(); setTurnbar(); }, 900);
     } else {
-      // beide gescheitert -> Feld bleibt frei, anderer wählt
+      // beide gescheitert -> Feld bleibt frei
       phase = "resolved";
-      chooser = (chooser === "A") ? "B" : "A";
+      chooser = (settings.mode === "puck") ? puck : other(chooser);
       setStatus("Schade — niemand richtig. Das Feld bleibt frei.", "bad");
       revealSolution(true);
       render();
@@ -1262,7 +1308,7 @@ function makeProblem(areas, difficulties, grade) {
     if (phase !== "ready" && phase !== "answering") return;
     stopTimer();
     phase = "resolved";
-    chooser = (chooser === "A") ? "B" : "A";
+    chooser = (settings.mode === "puck") ? puck : other(chooser);
     setStatus("Aufgelöst durch Spielleitung. Feld bleibt frei.", "neutral");
     revealSolution(true);
     render();
@@ -1296,6 +1342,9 @@ function makeProblem(areas, difficulties, grade) {
     countB.innerHTML = counts.B + "<small>Felder</small>";
     teamA.classList.toggle("turn", phase === "choose" && chooser === "A");
     teamB.classList.toggle("turn", phase === "choose" && chooser === "B");
+    var puckMode = settings.mode === "puck";
+    puckA.classList.toggle("hidden", !(puckMode && puck === "A"));
+    puckB.classList.toggle("hidden", !(puckMode && puck === "B"));
   }
   function fitProblem() {
     var fit = problemEl.querySelector(".fit");
@@ -1316,9 +1365,14 @@ function makeProblem(areas, difficulties, grade) {
     if (phase === "choose") {
       turnbar.classList.add(chooser === "A" ? "turnA" : "turnB");
       dot = '<span class="dot" style="background:' + COL[chooser] + '"></span>';
-      txt = '<span class="txt">' + escapeHTML(teamName(chooser)) + " wählt ein Sechseck</span>";
+      var suffix = settings.mode === "alt" ? " ist am Zug — Sechseck wählen"
+        : settings.mode === "puck" ? " hat den Puck — Sechseck wählen"
+          : " wählt ein Sechseck";
+      txt = '<span class="txt">' + escapeHTML(teamName(chooser)) + suffix + "</span>";
     } else if (phase === "ready") {
-      txt = '<span class="txt">Frage offen — beide Teams buzzern!</span>';
+      txt = '<span class="txt">' + (settings.mode === "puck"
+        ? ("Frage offen — beide buzzern (Puck: " + escapeHTML(teamName(puck)) + ")")
+        : "Frage offen — beide Teams buzzern!") + "</span>";
     } else if (phase === "answering") {
       turnbar.classList.add(active === "A" ? "turnA" : "turnB");
       dot = '<span class="dot" style="background:' + COL[active] + '"></span>';
@@ -1439,6 +1493,7 @@ function makeProblem(areas, difficulties, grade) {
     selGrade.value = String(settings.grade);
     buildAreaChecks();
     syncSeg(segDiff, settings.difficulty);
+    syncSeg(segMode, settings.mode);
     syncSeg(segSize, settings.size);
     syncSeg(segStart, settings.start);
     inpTime.value = settings.answerTime;
@@ -1508,6 +1563,9 @@ function makeProblem(areas, difficulties, grade) {
   });
   Array.prototype.forEach.call(segDiff.querySelectorAll("button"), function (b) {
     b.addEventListener("click", function () { settings.difficulty = b.dataset.v; syncSeg(segDiff, settings.difficulty); });
+  });
+  Array.prototype.forEach.call(segMode.querySelectorAll("button"), function (b) {
+    b.addEventListener("click", function () { settings.mode = b.dataset.v; syncSeg(segMode, settings.mode); });
   });
   Array.prototype.forEach.call(segSize.querySelectorAll("button"), function (b) {
     b.addEventListener("click", function () { settings.size = parseInt(b.dataset.v, 10); syncSeg(segSize, settings.size); });
